@@ -1,0 +1,13 @@
+{
+  "rules": {
+    "games": {
+      ".read": "auth != null",
+      "$roomId": {
+        ".write": "auth != null && (newData.exists() || data.child('hostUid').val() === auth.uid || auth.token.email === 'vmsk131uh@gmail.com')",
+        "hostUid": {
+          ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || (data.exists() && newData.val() === data.val()))"
+        }
+      }
+    }
+  }
+}
