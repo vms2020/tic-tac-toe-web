@@ -849,6 +849,7 @@ function subscribeToGlobalChat() {
         snapshot => {
             globalChatMessages = snapshot.val() || {};
             renderGlobalChatMessages();
+            void pruneGlobalChat(globalChatMessages);
         },
         error => {
             console.error("Common chat error:", error);
@@ -876,3 +877,24 @@ onValue(ref(db, "games"), snapshot => {
     console.error("Could not load rooms:", error);
     toast("Could not load rooms. Check database rules.");
 });
+
+
+async function pruneGlobalChat(messages) {
+    if (currentUser?.email !== "vmsk131uh@gmail.com") return;
+
+    const entries = Object.entries(messages || {})
+        .sort((a, b) =>
+            (a[1].createdAt || 0) - (b[1].createdAt || 0)
+        );
+
+    const excess = entries.slice(0, Math.max(0, entries.length - 100));
+
+    for (const [messageId] of excess) {
+        try {
+            await remove(ref(db, `globalChat/${messageId}`));
+        } catch (err) {
+            console.error("Could not prune old chat message:", err);
+            break;
+        }
+    }
+}
