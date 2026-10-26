@@ -1,3 +1,4 @@
+
 {
   "rules": {
     "games": {
@@ -7,6 +8,13 @@
         "hostUid": {
           ".validate": "newData.isString() && ((!data.exists() && newData.val() === auth.uid) || (data.exists() && newData.val() === data.val()))"
         }
+      }
+    },
+    "globalChat": {
+      ".read": true,
+      "$messageId": {
+        ".write": "auth != null && !data.exists() && newData.exists() && newData.child('uid').val() === auth.uid",
+        ".validate": "newData.hasChildren(['uid', 'name', 'text', 'createdAt']) && newData.child('uid').isString() && newData.child('name').isString() && newData.child('name').val().length <= 100 && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 500 && newData.child('createdAt').isNumber()"
       }
     }
   }

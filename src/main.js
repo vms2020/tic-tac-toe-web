@@ -1,12 +1,29 @@
 import "./style.css";
-import { auth, db } from "./firebase.js";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "firebase/auth";
-import { ref, push, set, remove, onValue, runTransaction, serverTimestamp } from "firebase/database";
+import {auth, db} from "./firebase.js";
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    updateProfile
+} from "firebase/auth";
+import {ref, push, set, remove, onValue, runTransaction, serverTimestamp} from "firebase/database";
 
 const $ = (s, root = document) => root.querySelector(s);
-const esc = (v = "") => String(v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let currentUser = null, rooms = {}, selectedRoomId = null, toastTimer, chatMessages = {}, chatRoomSubscribed = null, unsubscribeChat = null;
-const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+const esc = (v = "") => String(v).replace(/[&<>"']/g, c => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+}[c]));
+
+let currentUser = null, rooms = {}, selectedRoomId = null, toastTimer, chatMessages = {}, chatRoomSubscribed = null,
+    unsubscribeChat = null;
+let globalChatMessages = {};
+let unsubscribeGlobalChat = null;
+
+const wins = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
 const ADMIN_EMAIL = "vmsk131uh@gmail.com";
 const isAdmin = u => String(u?.email || "").toLowerCase() === ADMIN_EMAIL;
 const canDeleteRoom = (room, u) => !!u && !!room && (room.hostUid === u.uid || isAdmin(u));
@@ -15,13 +32,20 @@ const roomNow = () => selectedRoomId ? rooms[selectedRoomId] || null : null;
 const symbolOf = (r, uid) => r?.players?.X?.uid === uid ? "X" : r?.players?.O?.uid === uid ? "O" : null;
 
 function toast(msg) {
-  let n = $(".toast");
-  if (!n) { n = document.createElement("div"); n.className = "toast"; document.body.append(n); }
-  n.textContent = msg; n.classList.add("visible"); clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => n.classList.remove("visible"), 2800);
+    let n = $(".toast");
+    if (!n) {
+        n = document.createElement("div");
+        n.className = "toast";
+        document.body.append(n);
+    }
+    n.textContent = msg;
+    n.classList.add("visible");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => n.classList.remove("visible"), 2800);
 }
+
 function openModal(kind) {
-  const content = kind === "auth" ? `
+    const content = kind === "auth" ? `
     <div class="eyebrow">YOUR NIGHTFALL ACCOUNT</div><h2 id="modal-title">Welcome back</h2>
     <p class="modal-copy">Sign in or create an account to host and play matches.</p>
     <form id="auth-form" class="modal-form">
@@ -38,9 +62,12 @@ function openModal(kind) {
       <label>Your symbol<select name="symbol"><option value="X">X — first move</option><option value="O">O — second move</option></select></label>
       <button class="primary-button full" type="submit">Create room</button>
     </form>`;
-  $("#modal-root").innerHTML = `<div class="modal-backdrop" data-close="backdrop"><section class="modal" role="dialog" aria-modal="true"><button class="modal-close" data-close="button" aria-label="Close">×</button>${content}</section></div>`;
+    $("#modal-root").innerHTML = `<div class="modal-backdrop" data-close="backdrop"><section class="modal" role="dialog" aria-modal="true"><button class="modal-close" data-close="button" aria-label="Close">×</button>${content}</section></div>`;
 }
-function closeModal() { $("#modal-root").innerHTML = ""; }
+
+function closeModal() {
+    $("#modal-root").innerHTML = "";
+}
 
 // function render() {
 //   const user = currentUser, room = roomNow(), allEntries = Object.entries(rooms).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)), entries = user ? allEntries : [];
@@ -73,49 +100,49 @@ function closeModal() { $("#modal-root").innerHTML = ""; }
 
 
 function render() {
-  const user = currentUser;
-  const room = roomNow();
+    const user = currentUser;
+    const room = roomNow();
 
-  const allEntries = Object.entries(rooms).sort(
-    (a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0)
-  );
+    const allEntries = Object.entries(rooms).sort(
+        (a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0)
+    );
 
-  // Public rooms are visible to guests and signed-in users.
-  const entries = allEntries;
+    // Public rooms are visible to guests and signed-in users.
+    const entries = allEntries;
 
-  const board = Array.isArray(room?.board)
-    ? room.board
-    : Array(9).fill("");
+    const board = Array.isArray(room?.board)
+        ? room.board
+        : Array(9).fill("");
 
-  const mine = symbolOf(room, user?.uid);
-  const canDelete = canDeleteRoom(room, user);
-  const myTurn =
-    !!room &&
-    room.status === "In progress" &&
-    room.turn === mine;
+    const mine = symbolOf(room, user?.uid);
+    const canDelete = canDeleteRoom(room, user);
+    const myTurn =
+        !!room &&
+        room.status === "In progress" &&
+        room.turn === mine;
 
-  const canJoin =
-    !!user &&
-    !!room &&
-    room.status === "Waiting" &&
-    !mine;
+    const canJoin =
+        !!user &&
+        !!room &&
+        room.status === "Waiting" &&
+        !mine;
 
-  const finished =
-    room && ["Finished", "Draw", "Stopped"].includes(room.status);
+    const finished =
+        room && ["Finished", "Draw", "Stopped"].includes(room.status);
 
-  const statusText = !room
-    ? "Choose a room or create one"
-    : room.status === "Finished"
-      ? `${room.winner} wins`
-      : room.status === "Draw"
-        ? "Draw game"
-        : room.status === "In progress"
-          ? `${room.turn}'s turn`
-: room.status;
+    const statusText = !room
+        ? "Choose a room or create one"
+        : room.status === "Finished"
+            ? `${room.winner} wins`
+            : room.status === "Draw"
+                ? "Draw game"
+                : room.status === "In progress"
+                    ? `${room.turn}'s turn`
+                    : room.status;
 
-const list = entries.length
-    ? entries
-        .map(([id, r]) => `
+    const list = entries.length
+        ? entries
+            .map(([id, r]) => `
           <button
             class="game-row ${id === selectedRoomId ? "selected" : ""}"
             data-room="${esc(id)}"
@@ -133,18 +160,18 @@ const list = entries.length
             </span>
 
             <span class="status ${
-            r.status === "Waiting"
-                ? "waiting"
-                : r.status === "In progress"
-                    ? "playing"
-                    : "finished"
-        }">
+                r.status === "Waiting"
+                    ? "waiting"
+                    : r.status === "In progress"
+                        ? "playing"
+                        : "finished"
+            }">
               ${esc(r.status || "Waiting")}
             </span>
           </button>
         `)
-        .join("")
-    : `
+            .join("")
+        : `
       <div class="empty-state">
         <div class="empty-mark">✳</div>
         <strong>No rooms yet</strong>
@@ -158,7 +185,7 @@ const list = entries.length
       </div>
     `;
 
-$("#app").innerHTML = `
+    $("#app").innerHTML = `
     <div class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="#">
@@ -239,8 +266,8 @@ $("#app").innerHTML = `
             <h2>Public rooms <span class="count">${entries.length}</span></h2>
             <p>
               ${user
-    ? "Rooms created by the community, updated in real time."
-    : "Browse live community rooms. Sign in to join a match."}
+        ? "Rooms created by the community, updated in real time."
+        : "Browse live community rooms. Sign in to join a match."}
             </p>
           </div>
 
@@ -275,8 +302,8 @@ $("#app").innerHTML = `
                 <h3>Match room</h3>
                 <p>
                   ${room
-    ? `Room #${esc(selectedRoomId.slice(-6).toUpperCase())}`
-    : "Select a public room"}
+        ? `Room #${esc(selectedRoomId.slice(-6).toUpperCase())}`
+        : "Select a public room"}
                 </p>
               </div>
               <span class="tiny-live">
@@ -285,8 +312,8 @@ $("#app").innerHTML = `
             </div>
 
             ${
-    room
-        ? `
+        room
+            ? `
                   <div class="match-title">
                     <div class="match-symbol">${room.symbol === "O" ? "○" : "×"}</div>
                     <div>
@@ -334,20 +361,20 @@ $("#app").innerHTML = `
 
                   <div class="match-actions">
                     ${
-            canDelete
-                ? `<button class="danger-button" data-action="delete-room">Delete game</button>`
-                : ""
-        }
+                canDelete
+                    ? `<button class="danger-button" data-action="delete-room">Delete game</button>`
+                    : ""
+            }
 
                     ${
-            canJoin
-                ? `<button class="primary-button full" data-action="join">Join as ${room.players?.X ? "O" : "X"} →</button>`
-                : !user && room.status === "Waiting"
-                    ? `<button class="primary-button full" data-action="auth">Sign in to join this game</button>`
-                    : mine && room.status === "In progress"
-                        ? `<div class="turn-hint">${myTurn ? "It's your turn. Make a move." : "Waiting for your opponent…"}</div>`
-                        : `<div class="turn-hint">${esc(statusText)}</div>`
-        }
+                canJoin
+                    ? `<button class="primary-button full" data-action="join">Join as ${room.players?.X ? "O" : "X"} →</button>`
+                    : !user && room.status === "Waiting"
+                        ? `<button class="primary-button full" data-action="auth">Sign in to join this game</button>`
+                        : mine && room.status === "In progress"
+                            ? `<div class="turn-hint">${myTurn ? "It's your turn. Make a move." : "Waiting for your opponent…"}</div>`
+                            : `<div class="turn-hint">${esc(statusText)}</div>`
+            }
                   </div>
 
                   <section class="room-chat">
@@ -360,28 +387,28 @@ $("#app").innerHTML = `
                     </div>
 
                     ${
-            user && mine
-                ? `
+                user && mine
+                    ? `
                           <div class="chat-messages" id="chat-messages">
                             ${
-                    Object.entries(chatMessages)
-                        .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0))
-                        .map(([mid, m]) => `
+                        Object.entries(chatMessages)
+                            .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0))
+                            .map(([mid, m]) => `
                                   <div class="chat-message">
                                     <strong>${esc(m.name || "Player")}</strong>
                                     <p>${esc(m.text || "")}</p>
                                     <small>
                                       ${m.createdAt
-                            ? new Date(m.createdAt).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit"
-                            })
-                            : "Just now"}
+                                ? new Date(m.createdAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit"
+                                })
+                                : "Just now"}
                                     </small>
                                   </div>
                                 `).join("")
-                    || `<div class="chat-empty">No messages yet. Say hello!</div>`
-                }
+                        || `<div class="chat-empty">No messages yet. Say hello!</div>`
+                    }
                           </div>
 
                           <form id="chat-form" class="chat-form">
@@ -397,17 +424,17 @@ $("#app").innerHTML = `
                             </button>
                           </form>
                         `
-                : `
+                    : `
                           <div class="chat-locked">
                             ${user
-                    ? "Join this room to participate in chat."
-                    : "Sign in and join a room to use chat."}
+                        ? "Join this room to participate in chat."
+                        : "Sign in and join a room to use chat."}
                           </div>
                         `
-        }
+            }
                   </section>
                 `
-        : `
+            : `
                   <div class="empty-match">
                     <div class="empty-mark">× <span>○</span></div>
                     <h3>Your next match starts here.</h3>
@@ -417,10 +444,50 @@ $("#app").innerHTML = `
                     </button>
                   </div>
                 `
-}
+    }
           </section>
         </div>
 
+        <section class="panel global-chat-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>Common Lounge Chat</h3>
+              <p>Chat with everyone in Nightfall.</p>
+            </div>
+            <span class="chat-live"><i></i> LIVE</span>
+          </div>
+
+          <div class="chat-messages" id="global-chat-messages">
+            Loading messages…
+          </div>
+
+          ${
+        user
+            ? `
+                <form id="global-chat-form" class="chat-form">
+                  <input
+                    name="message"
+                    maxlength="500"
+                    placeholder="Message the community…"
+                    autocomplete="off"
+                    required
+                  >
+                  <button class="primary-button" type="submit">
+                    Send ↗
+                  </button>
+                </form>
+              `
+            : `
+                <div class="chat-locked">
+                  You can read the chat. Sign in to send a message.
+                  <br>
+                  <button class="primary-button" data-action="auth">
+                    Sign in to chat
+                  </button>
+                </div>
+              `
+    }
+        </section>
         <footer class="footer">
           <span>✳ NIGHTFALL GAME LOUNGE</span>
           <span>Built for the next move.</span>
@@ -428,171 +495,384 @@ $("#app").innerHTML = `
       </main>
     </div>
   `;
+
+    renderGlobalChatMessages();
 }
 
 async function createRoom(form) {
-  if (!currentUser) return openModal("auth");
-  const data = new FormData(form), symbol = data.get("symbol")==="O"?"O":"X", name = String(data.get("roomName")||"Friendly match").trim().slice(0,50);
-  const newRef = push(ref(db,"games"));
-  try {
-    await set(newRef,{name:name||"Friendly match",hostUid:currentUser.uid,hostName:nameOf(currentUser),symbol,status:"Waiting",board:Array(9).fill(""),turn:"X",players:{[symbol]:{uid:currentUser.uid,name:nameOf(currentUser)}},createdAt:serverTimestamp()});
-    selectedRoomId = newRef.key; closeModal(); render(); toast("Room created. Invite another player to join!");
-  } catch(e) { console.error(e); toast("Could not create room. Check Firebase database rules."); }
+    if (!currentUser) return openModal("auth");
+    const data = new FormData(form), symbol = data.get("symbol") === "O" ? "O" : "X",
+        name = String(data.get("roomName") || "Friendly match").trim().slice(0, 50);
+    const newRef = push(ref(db, "games"));
+    try {
+        await set(newRef, {
+            name: name || "Friendly match",
+            hostUid: currentUser.uid,
+            hostName: nameOf(currentUser),
+            symbol,
+            status: "Waiting",
+            board: Array(9).fill(""),
+            turn: "X",
+            players: {[symbol]: {uid: currentUser.uid, name: nameOf(currentUser)}},
+            createdAt: serverTimestamp()
+        });
+        selectedRoomId = newRef.key;
+        closeModal();
+        render();
+        toast("Room created. Invite another player to join!");
+    } catch (e) {
+        console.error(e);
+        toast("Could not create room. Check Firebase database rules.");
+    }
 }
+
 async function joinRoom() {
-  if (!currentUser) return openModal("auth");
-  if (!selectedRoomId) return toast("Select a room first.");
-  const id = selectedRoomId;
-  try {
-    const result = await runTransaction(ref(db,`games/${id}`), room => {
-      if (!room || room.status!=="Waiting") return;
-      room.players ||= {};
-      if (room.players.X?.uid===currentUser.uid || room.players.O?.uid===currentUser.uid) return;
-      const slot = room.players.X ? "O" : "X";
-      if (room.players[slot]) return;
-      room.players[slot] = {uid:currentUser.uid,name:nameOf(currentUser)};
-      if (room.players.X && room.players.O) room.status="In progress";
-      room.board ||= Array(9).fill(""); room.turn="X";
-      return room;
-    });
-    toast(result.committed?"You joined the room!":"This room is no longer available.");
-  } catch(e) { console.error(e); toast("Could not join. Check database rules."); }
+    if (!currentUser) return openModal("auth");
+    if (!selectedRoomId) return toast("Select a room first.");
+    const id = selectedRoomId;
+    try {
+        const result = await runTransaction(ref(db, `games/${id}`), room => {
+            if (!room || room.status !== "Waiting") return;
+            room.players ||= {};
+            if (room.players.X?.uid === currentUser.uid || room.players.O?.uid === currentUser.uid) return;
+            const slot = room.players.X ? "O" : "X";
+            if (room.players[slot]) return;
+            room.players[slot] = {uid: currentUser.uid, name: nameOf(currentUser)};
+            if (room.players.X && room.players.O) room.status = "In progress";
+            room.board ||= Array(9).fill("");
+            room.turn = "X";
+            return room;
+        });
+        toast(result.committed ? "You joined the room!" : "This room is no longer available.");
+    } catch (e) {
+        console.error(e);
+        toast("Could not join. Check database rules.");
+    }
 }
+
 async function deleteRoom() {
-  const room = roomNow();
-  if (!currentUser || !selectedRoomId || !canDeleteRoom(room, currentUser)) {
-    toast("Only the room creator or admin can delete this game.");
-    return;
-  }
-  const roomName = room?.name || "this game";
-  if (!window.confirm(`Delete “${roomName}”? This removes the room and its chat permanently.`)) return;
-  const id = selectedRoomId;
-  try {
-    await remove(ref(db, `games/${id}`));
-    if (selectedRoomId === id) selectedRoomId = null;
-    chatMessages = {};
-    subscribeToChat(null);
-    render();
-    toast("Game deleted.");
-  } catch (err) {
-    console.error(err);
-    toast("Could not delete this game. Check your Realtime Database rules.");
-  }
+    const room = roomNow();
+    if (!currentUser || !selectedRoomId || !canDeleteRoom(room, currentUser)) {
+        toast("Only the room creator or admin can delete this game.");
+        return;
+    }
+    const roomName = room?.name || "this game";
+    if (!window.confirm(`Delete “${roomName}”? This removes the room and its chat permanently.`)) return;
+    const id = selectedRoomId;
+    try {
+        await remove(ref(db, `games/${id}`));
+        if (selectedRoomId === id) selectedRoomId = null;
+        chatMessages = {};
+        subscribeToChat(null);
+        render();
+        toast("Game deleted.");
+    } catch (err) {
+        console.error(err);
+        toast("Could not delete this game. Check your Realtime Database rules.");
+    }
 }
 
 async function makeMove(index) {
-  if (!currentUser || !selectedRoomId) return;
-  try {
-    const result = await runTransaction(ref(db,`games/${selectedRoomId}`), room => {
-      if (!room || room.status!=="In progress") return;
-      const symbol=room.turn||"X";
-      if (room.players?.[symbol]?.uid!==currentUser.uid) return;
-      const board=Array.isArray(room.board)?[...room.board]:Array(9).fill("");
-      if (board[index]) return;
-      board[index]=symbol; room.board=board;
-      if (wins.some(line=>line.every(i=>board[i]===symbol))) {room.status="Finished";room.winner=symbol;}
-      else if (board.every(Boolean)) {room.status="Draw";room.winner=null;}
-      else room.turn=symbol==="X"?"O":"X";
-      return room;
-    });
-    if(!result.committed) toast("It's not your turn, or that square is taken.");
-  } catch(e) { console.error(e); toast("Could not save move. Check database rules."); }
+    if (!currentUser || !selectedRoomId) return;
+    try {
+        const result = await runTransaction(ref(db, `games/${selectedRoomId}`), room => {
+            if (!room || room.status !== "In progress") return;
+            const symbol = room.turn || "X";
+            if (room.players?.[symbol]?.uid !== currentUser.uid) return;
+            const board = Array.isArray(room.board) ? [...room.board] : Array(9).fill("");
+            if (board[index]) return;
+            board[index] = symbol;
+            room.board = board;
+            if (wins.some(line => line.every(i => board[i] === symbol))) {
+                room.status = "Finished";
+                room.winner = symbol;
+            } else if (board.every(Boolean)) {
+                room.status = "Draw";
+                room.winner = null;
+            } else room.turn = symbol === "X" ? "O" : "X";
+            return room;
+        });
+        if (!result.committed) toast("It's not your turn, or that square is taken.");
+    } catch (e) {
+        console.error(e);
+        toast("Could not save move. Check database rules.");
+    }
 }
 
 $("#app").addEventListener("click", async e => {
-  const b=e.target.closest("[data-action],[data-room],[data-cell]"); if(!b)return;
-  if(b.hasAttribute("data-room")){selectedRoomId=b.dataset.room;chatMessages={};subscribeToChat(selectedRoomId);render();return;}
-  if(b.hasAttribute("data-cell")){await makeMove(Number(b.dataset.cell));return;}
-  switch(b.dataset.action){
-    case "create": if(!currentUser)openModal("auth");else openModal("create");break;
-    case "auth": if(currentUser){try{await signOut(auth);toast("Signed out.");}catch(err){toast(err.message);}}else openModal("auth");break;
-    case "join": await joinRoom();break;
-    case "delete-room": await deleteRoom();break;
-    case "refresh": render();toast("Lobby refreshed.");break;
-    case "lobby": window.scrollTo({top:0,behavior:"smooth"});break;
-  }
+    const b = e.target.closest("[data-action],[data-room],[data-cell]");
+    if (!b) return;
+    if (b.hasAttribute("data-room")) {
+        selectedRoomId = b.dataset.room;
+        chatMessages = {};
+        subscribeToChat(selectedRoomId);
+        render();
+        return;
+    }
+    if (b.hasAttribute("data-cell")) {
+        await makeMove(Number(b.dataset.cell));
+        return;
+    }
+    switch (b.dataset.action) {
+        case "create":
+            if (!currentUser) openModal("auth"); else openModal("create");
+            break;
+        case "auth":
+            if (currentUser) {
+                try {
+                    await signOut(auth);
+                    toast("Signed out.");
+                } catch (err) {
+                    toast(err.message);
+                }
+            } else openModal("auth");
+            break;
+        case "join":
+            await joinRoom();
+            break;
+        case "delete-room":
+            await deleteRoom();
+            break;
+        case "refresh":
+            render();
+            toast("Lobby refreshed.");
+            break;
+        case "lobby":
+            window.scrollTo({top: 0, behavior: "smooth"});
+            break;
+    }
 });
 $("#app").addEventListener("submit", async e => {
-  if (e.target.id !== "chat-form") return;
-  e.preventDefault();
-  const form = e.target, button = form.querySelector('button[type="submit"]'), input = form.elements.message;
-  const message = String(input.value || "").trim();
-  if (!message || !currentUser || !selectedRoomId) return;
-  const room = roomNow();
-  if (!symbolOf(room,currentUser.uid)) { toast("Join this room before chatting."); return; }
-  if (button) button.disabled = true;
-  try {
-    await push(ref(db,`games/${selectedRoomId}/messages`), {uid:currentUser.uid,name:nameOf(currentUser),text:message,createdAt:Date.now()});
-    input.value = "";
-  } catch (err) { console.error(err); toast("Message could not be sent. Check database rules."); }
-  finally { if (button?.isConnected) button.disabled = false; }
-});
-$("#modal-root").addEventListener("click",e=>{if(e.target.dataset.close==="backdrop"||e.target.dataset.close==="button")closeModal();});
-$("#modal-root").addEventListener("change",e=>{
-  if(e.target.name!=="mode")return;
-  const signup=e.target.checked;$(".signup-only")?.classList.toggle("hidden",!signup);
-  $("#modal-title").textContent=signup?"Create your account":"Welcome back";
-  const button=$("#auth-form button[type=submit]");if(button)button.textContent=signup?"Create account":"Sign in";
-});
-$("#modal-root").addEventListener("submit",async e=>{
-  e.preventDefault();const form=e.target,button=form.querySelector('button[type="submit"]');
-  if(button){button.disabled=true;button.textContent="Please wait…";}
-  try{
-    if(form.id==="chat-form"){
-      if(!currentUser || !selectedRoomId) throw new Error("Sign in and select a room first.");
-      const room = roomNow();
-      if(!symbolOf(room,currentUser.uid)) throw new Error("Join this room before chatting.");
-      const input=form.elements.message, message=String(input.value||"").trim();
-      if(!message) return;
-      await push(ref(db,`games/${selectedRoomId}/messages`),{uid:currentUser.uid,name:nameOf(currentUser),text:message,createdAt:Date.now()});
-      input.value=""; return;
+    if (e.target.id !== "chat-form") return;
+    e.preventDefault();
+    const form = e.target, button = form.querySelector('button[type="submit"]'), input = form.elements.message;
+    const message = String(input.value || "").trim();
+    if (!message || !currentUser || !selectedRoomId) return;
+    const room = roomNow();
+    if (!symbolOf(room, currentUser.uid)) {
+        toast("Join this room before chatting.");
+        return;
     }
-    if(form.id==="create-form"){await createRoom(form);return;}
-    if(form.id==="auth-form"){
-      const data=new FormData(form),email=String(data.get("email")||"").trim(),password=String(data.get("password")||""),signup=data.get("mode")==="on";
-      if(signup){const displayName=String(data.get("displayName")||"").trim();if(!displayName)throw new Error("Please enter a display name.");const cred=await createUserWithEmailAndPassword(auth,email,password);await updateProfile(cred.user,{displayName});toast("Account created successfully!");}
-      else {await signInWithEmailAndPassword(auth,email,password);toast("Signed in successfully!");}
-      closeModal();
+    if (button) button.disabled = true;
+    try {
+        await push(ref(db, `games/${selectedRoomId}/messages`), {
+            uid: currentUser.uid,
+            name: nameOf(currentUser),
+            text: message,
+            createdAt: Date.now()
+        });
+        input.value = "";
+    } catch (err) {
+        console.error(err);
+        toast("Message could not be sent. Check database rules.");
+    } finally {
+        if (button?.isConnected) button.disabled = false;
     }
-  }catch(err){
-    console.error(err);const friendly={"auth/email-already-in-use":"An account already exists for this email.","auth/invalid-email":"Enter a valid email address.","auth/weak-password":"Choose a password with at least 6 characters.","auth/invalid-credential":"Incorrect email or password.","auth/too-many-requests":"Too many attempts. Try again later.","auth/network-request-failed":"Network error. Check your connection."};
-    toast(friendly[err.code]||err.message||"Something went wrong.");
-  }finally{if(button?.isConnected){button.disabled=false;button.textContent=form.id==="create-form"?"Create room":"Sign in";}}
 });
-document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
+
+$("#app").addEventListener("submit", async e => {
+    if (e.target.id !== "global-chat-form") return;
+
+    e.preventDefault();
+
+    const form = e.target;
+    const button = form.querySelector('button[type="submit"]');
+    const input = form.elements.message;
+    const message = String(input.value || "").trim();
+
+    if (!message) return;
+
+    if (!currentUser) {
+        openModal("auth");
+        return;
+    }
+
+    if (button) button.disabled = true;
+
+    try {
+        await push(ref(db, "globalChat"), {
+            uid: currentUser.uid,
+            name: nameOf(currentUser),
+            text: message.slice(0, 500),
+            createdAt: Date.now()
+        });
+
+        input.value = "";
+    } catch (err) {
+        console.error("Common chat send error:", err);
+        toast("Message could not be sent. Check Firebase database rules.");
+    } finally {
+        if (button?.isConnected) button.disabled = false;
+    }
+});
+
+$("#modal-root").addEventListener("click", e => {
+    if (e.target.dataset.close === "backdrop" || e.target.dataset.close === "button") closeModal();
+});
+$("#modal-root").addEventListener("change", e => {
+    if (e.target.name !== "mode") return;
+    const signup = e.target.checked;
+    $(".signup-only")?.classList.toggle("hidden", !signup);
+    $("#modal-title").textContent = signup ? "Create your account" : "Welcome back";
+    const button = $("#auth-form button[type=submit]");
+    if (button) button.textContent = signup ? "Create account" : "Sign in";
+});
+$("#modal-root").addEventListener("submit", async e => {
+    e.preventDefault();
+    const form = e.target, button = form.querySelector('button[type="submit"]');
+    if (button) {
+        button.disabled = true;
+        button.textContent = "Please wait…";
+    }
+    try {
+        if (form.id === "chat-form") {
+            if (!currentUser || !selectedRoomId) throw new Error("Sign in and select a room first.");
+            const room = roomNow();
+            if (!symbolOf(room, currentUser.uid)) throw new Error("Join this room before chatting.");
+            const input = form.elements.message, message = String(input.value || "").trim();
+            if (!message) return;
+            await push(ref(db, `games/${selectedRoomId}/messages`), {
+                uid: currentUser.uid,
+                name: nameOf(currentUser),
+                text: message,
+                createdAt: Date.now()
+            });
+            input.value = "";
+            return;
+        }
+        if (form.id === "create-form") {
+            await createRoom(form);
+            return;
+        }
+        if (form.id === "auth-form") {
+            const data = new FormData(form), email = String(data.get("email") || "").trim(),
+                password = String(data.get("password") || ""), signup = data.get("mode") === "on";
+            if (signup) {
+                const displayName = String(data.get("displayName") || "").trim();
+                if (!displayName) throw new Error("Please enter a display name.");
+                const cred = await createUserWithEmailAndPassword(auth, email, password);
+                await updateProfile(cred.user, {displayName});
+                toast("Account created successfully!");
+            } else {
+                await signInWithEmailAndPassword(auth, email, password);
+                toast("Signed in successfully!");
+            }
+            closeModal();
+        }
+    } catch (err) {
+        console.error(err);
+        const friendly = {
+            "auth/email-already-in-use": "An account already exists for this email.",
+            "auth/invalid-email": "Enter a valid email address.",
+            "auth/weak-password": "Choose a password with at least 6 characters.",
+            "auth/invalid-credential": "Incorrect email or password.",
+            "auth/too-many-requests": "Too many attempts. Try again later.",
+            "auth/network-request-failed": "Network error. Check your connection."
+        };
+        toast(friendly[err.code] || err.message || "Something went wrong.");
+    } finally {
+        if (button?.isConnected) {
+            button.disabled = false;
+            button.textContent = form.id === "create-form" ? "Create room" : "Sign in";
+        }
+    }
+});
+document.addEventListener("keydown", e => {
+    if (e.key === "Escape") closeModal();
+});
+
 function subscribeToChat(roomId) {
-  if (unsubscribeChat) { unsubscribeChat(); unsubscribeChat = null; }
-  chatRoomSubscribed = roomId;
-  chatMessages = {};
-  if (!roomId) return;
-  unsubscribeChat = onValue(ref(db,`games/${roomId}/messages`), snapshot => {
-    if (chatRoomSubscribed !== roomId) return;
-    chatMessages = snapshot.val() || {};
-    if (currentUser && symbolOf(rooms[roomId],currentUser.uid)) {
-      const box = $("#chat-messages");
-      if (box) {
-        box.innerHTML = Object.entries(chatMessages).sort((a,b)=>(a[1].createdAt||0)-(b[1].createdAt||0)).map(([mid,m])=>`<div class="chat-message"><strong>${esc(m.name||"Player")}</strong><p>${esc(m.text||"")}</p><small>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"Just now"}</small></div>`).join("") || `<div class="chat-empty">No messages yet. Say hello!</div>`;
-        box.scrollTop = box.scrollHeight;
-      }
+    if (unsubscribeChat) {
+        unsubscribeChat();
+        unsubscribeChat = null;
     }
-  }, error => { console.error(error); toast("Chat could not load. Check database rules."); });
+    chatRoomSubscribed = roomId;
+    chatMessages = {};
+    if (!roomId) return;
+    unsubscribeChat = onValue(ref(db, `games/${roomId}/messages`), snapshot => {
+        if (chatRoomSubscribed !== roomId) return;
+        chatMessages = snapshot.val() || {};
+        if (currentUser && symbolOf(rooms[roomId], currentUser.uid)) {
+            const box = $("#chat-messages");
+            if (box) {
+                box.innerHTML = Object.entries(chatMessages).sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0)).map(([mid, m]) => `<div class="chat-message"><strong>${esc(m.name || "Player")}</strong><p>${esc(m.text || "")}</p><small>${m.createdAt ? new Date(m.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                }) : "Just now"}</small></div>`).join("") || `<div class="chat-empty">No messages yet. Say hello!</div>`;
+                box.scrollTop = box.scrollHeight;
+            }
+        }
+    }, error => {
+        console.error(error);
+        toast("Chat could not load. Check database rules.");
+    });
 }
-onAuthStateChanged(auth,user=>{currentUser=user;render();});
+
+onAuthStateChanged(auth, user => {
+    currentUser = user;
+    render();
+    subscribeToGlobalChat();
+});
+
+
+function renderGlobalChatMessages() {
+    const box = document.querySelector("#global-chat-messages");
+    if (!box) return;
+
+    box.innerHTML = Object.entries(globalChatMessages)
+        .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0))
+        .slice(-100)
+        .map(([id, m]) => `
+      <div class="chat-message">
+        <strong>${esc(m.name || "Player")}</strong>
+        <p>${esc(m.text || "")}</p>
+        <small>${
+            m.createdAt
+                ? new Date(m.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                })
+                : "Just now"
+        }</small>
+      </div>
+    `)
+        .join("") || `<div class="chat-empty">No messages yet. Say hello!</div>`;
+
+    box.scrollTop = box.scrollHeight;
+}
+
+function subscribeToGlobalChat() {
+    if (unsubscribeGlobalChat) unsubscribeGlobalChat();
+
+    unsubscribeGlobalChat = onValue(
+        ref(db, "globalChat"),
+        snapshot => {
+            globalChatMessages = snapshot.val() || {};
+            renderGlobalChatMessages();
+        },
+        error => {
+            console.error("Common chat error:", error);
+            const box = document.querySelector("#global-chat-messages");
+            if (box) box.textContent = "Chat could not load. Please try again later.";
+        }
+    );
+}
+
 //onValue(ref(db,"games"),snapshot=>{rooms=snapshot.val()||{};if(!selectedRoomId||!rooms[selectedRoomId])selectedRoomId=currentUser?(Object.keys(rooms)[0]||null):null;if(selectedRoomId!==chatRoomSubscribed)subscribeToChat(selectedRoomId);render();},error=>{console.error(error);toast("Could not load rooms. Check database rules.");});
 
 onValue(ref(db, "games"), snapshot => {
-  rooms = snapshot.val() || {};
+    rooms = snapshot.val() || {};
 
-  if (!selectedRoomId || !rooms[selectedRoomId]) {
-    selectedRoomId = Object.keys(rooms)[0] || null;
-  }
+    if (!selectedRoomId || !rooms[selectedRoomId]) {
+        selectedRoomId = Object.keys(rooms)[0] || null;
+    }
 
-  if (selectedRoomId !== chatRoomSubscribed) {
-    subscribeToChat(selectedRoomId);
-  }
+    if (selectedRoomId !== chatRoomSubscribed) {
+        subscribeToChat(selectedRoomId);
+    }
 
-  render();
+    render();
 }, error => {
-  console.error("Could not load rooms:", error);
-  toast("Could not load rooms. Check database rules.");
+    console.error("Could not load rooms:", error);
+    toast("Could not load rooms. Check database rules.");
 });
