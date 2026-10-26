@@ -42,33 +42,392 @@ function openModal(kind) {
 }
 function closeModal() { $("#modal-root").innerHTML = ""; }
 
+// function render() {
+//   const user = currentUser, room = roomNow(), allEntries = Object.entries(rooms).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)), entries = user ? allEntries : [];
+//   const board = Array.isArray(room?.board) ? room.board : Array(9).fill("");
+//   const mine = symbolOf(room, user?.uid), canDelete = canDeleteRoom(room, user), myTurn = !!room && room.status === "In progress" && room.turn === mine;
+//   const canJoin = !!user && !!room && room.status === "Waiting" && !mine;
+//   const finished = room && ["Finished","Draw","Stopped"].includes(room.status);
+//   const statusText = !room ? "Choose a room or create one" : room.status === "Finished" ? `${room.winner} wins` : room.status === "Draw" ? "Draw game" : room.status === "In progress" ? `${room.turn}'s turn` : room.status;
+//   const list = !user ? `<div class="empty-state"><div class="empty-mark">⌁</div><strong>Sign in to see live games</strong><p>Register or sign in to browse public rooms, join matches and chat with players.</p><button class="primary-button" data-action="auth">Sign in / Register</button></div>` : entries.length ? entries.map(([id,r])=>`<button class="game-row ${id===selectedRoomId?"selected":""}" data-room="${esc(id)}"><span class="game-icon">${r.status==="Waiting"?"◷":"✳"}</span><span class="game-info"><strong>${esc(r.name||"Friendly match")}</strong><small>${esc(r.hostName||"Player")} · ${esc(r.status||"Waiting")}</small></span><span class="status ${r.status==="Waiting"?"waiting":r.status==="In progress"?"playing":"finished"}">${esc(r.status||"Waiting")}</span></button>`).join("") : `<div class="empty-state"><div class="empty-mark">✳</div><strong>No rooms yet</strong><p>Be the first to open a match.</p><button class="primary-button" data-action="create">Create the first room</button></div>`;
+//   $("#app").innerHTML = `<div class="app-shell">
+//     <aside class="sidebar"><a class="brand" href="#"><span class="brand-mark">✳</span><span>NIGHTFALL<small>GAME LOUNGE</small></span></a>
+//       <div class="side-label">PLAY</div><button class="nav-item active" data-action="lobby">▦ &nbsp; Game lobby</button><button class="nav-item" data-action="create">＋ &nbsp; Create a game</button>
+//       <div class="side-label side-label-spaced">YOUR ACCOUNT</div><div class="account-card"><div class="avatar">${esc(nameOf(user).slice(0,1).toUpperCase())}</div><div class="user-details"><strong>${esc(nameOf(user))}</strong><small>${user?esc(user.email):"Browsing as guest"}</small></div></div>
+//       <button class="outline-button full" data-action="auth">${user?"Sign out":"Sign in / Register"}</button><div class="sidebar-note"><span class="online-dot"></span> Firebase connected<br><small>Live rooms update automatically</small></div><div class="sidebar-bottom">✳ NIGHTFALL<span>STRATEGY MEETS SERENITY</span></div>
+//     </aside>
+//     <main class="main-content"><header class="topbar"><div><div class="eyebrow">THE ARENA</div><h1>Game lobby <span class="live-pill"><i></i> LIVE</span></h1></div><div class="topbar-actions"><span class="quiet-text">Your next match awaits.</span><button class="primary-button" data-action="create">＋ Create game</button></div></header>
+//       <section class="welcome-banner"><div class="banner-copy"><span class="banner-kicker">A LITTLE STRATEGY. A LOT OF FUN.</span><h2>Make your <em>next move.</em></h2><p>Challenge a friend and watch every move unfold live.</p><button class="light-button" data-action="create">Start a new game <span>↗</span></button></div><div class="banner-art"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="floating-x">×</div><div class="floating-o">○</div><div class="art-board"><b>×</b><i></i><b>○</b><i>○</i><b>×</b><i></i><b>×</b><i></i><b>○</b></div></div></section>
+//       <div class="section-heading"><div><h2>Public rooms <span class="count">${user ? entries.length : "—"}</span></h2><p>${user ? "Rooms created by the community, updated in real time." : "Sign in to browse community rooms."}</p></div>${user ? `<button class="text-button" data-action="refresh">↻ Refresh</button>` : ""}</div>
+//       <div class="content-grid"><section class="panel"><div class="panel-heading"><div><h3>Live rooms</h3><p>Choose a room to view its board</p></div><span class="tiny-live"><i></i> LIVE</span></div><div class="game-list">${list}</div><div class="panel-footer"><span>${user ? `${entries.length} public room${entries.length===1?"":"s"}` : "Account required"}</span>${user ? `<button class="text-button" data-action="create">Create room ↗</button>` : ""}</div></section>
+//       <section class="panel match-panel"><div class="panel-heading"><div><h3>Match room</h3><p>${room?`Room #${esc(selectedRoomId.slice(-6).toUpperCase())}`:"Select a public room"}</p></div><span class="tiny-live"><i></i> ${room?"SYNCED":"READY"}</span></div>
+//       ${room?`<div class="match-title"><div class="match-symbol">${room.symbol==="O"?"○":"×"}</div><div><h3>${esc(room.name||"Friendly match")}</h3><p>Hosted by <strong>${esc(room.hostName||"Player")}</strong></p></div></div>
+//       <div class="player-strip"><div><span class="player-dot x-dot">X</span><span><strong>${esc(room.players?.X?.name||"Waiting…")}</strong><small>Player X</small></span></div><div class="versus">VS</div><div><span class="player-dot o-dot">O</span><span><strong>${esc(room.players?.O?.name||"Waiting…")}</strong><small>Player O</small></span></div></div>
+//       <div class="board-wrap"><div class="live-board">${board.map((m,i)=>`<button class="board-cell ${m==="X"?"cell-x":m==="O"?"cell-o":""}" data-cell="${i}" ${!myTurn||m||finished?"disabled":""} aria-label="Cell ${i+1}">${m==="X"?"×":m==="O"?"○":""}</button>`).join("")}</div></div>
+//       <p class="board-status">${esc(statusText)}${mine?` · You are ${mine}`:""}</p><div class="match-actions">${canDelete?`<button class="danger-button" data-action="delete-room">Delete game</button>`:""}${canJoin?`<button class="primary-button full" data-action="join">Join as ${room.players?.X?"O":"X"} →</button>`:mine&&room.status==="In progress"?`<div class="turn-hint">${myTurn?"It's your turn. Make a move.":"Waiting for your opponent…"}</div>`:`<div class="turn-hint">${esc(statusText)}</div>`}</div>
+//       <section class="room-chat"><div class="chat-heading"><div><h3>Room chat</h3><p>Talk with your opponent while you play.</p></div><span class="chat-live"><i></i> LIVE</span></div>
+//       ${user && mine ? `<div class="chat-messages" id="chat-messages">${Object.entries(chatMessages).sort((a,b)=>(a[1].createdAt||0)-(b[1].createdAt||0)).map(([mid,m])=>`<div class="chat-message"><strong>${esc(m.name||"Player")}</strong><p>${esc(m.text||"")}</p><small>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"Just now"}</small></div>`).join("") || `<div class="chat-empty">No messages yet. Say hello!</div>`}</div><form id="chat-form" class="chat-form"><input name="message" maxlength="500" placeholder="Write a message…" autocomplete="off" required><button class="primary-button" type="submit" aria-label="Send message">Send ↗</button></form>` : `<div class="chat-locked">${user ? "Join this room to participate in chat." : "Sign in and join a room to use chat."}</div>`}</section>
+//       `:`<div class="empty-match"><div class="empty-mark">× <span>○</span></div><h3>Your next match starts here.</h3><p>Pick a room from the lobby or create your own.</p><button class="primary-button" data-action="create">Create a game</button></div>`}</section></div>
+//       <footer class="footer"><span>✳ NIGHTFALL GAME LOUNGE</span><span>Built for the next move.</span></footer></main></div>`;
+// }
+
+
 function render() {
-  const user = currentUser, room = roomNow(), allEntries = Object.entries(rooms).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)), entries = user ? allEntries : [];
-  const board = Array.isArray(room?.board) ? room.board : Array(9).fill("");
-  const mine = symbolOf(room, user?.uid), canDelete = canDeleteRoom(room, user), myTurn = !!room && room.status === "In progress" && room.turn === mine;
-  const canJoin = !!user && !!room && room.status === "Waiting" && !mine;
-  const finished = room && ["Finished","Draw","Stopped"].includes(room.status);
-  const statusText = !room ? "Choose a room or create one" : room.status === "Finished" ? `${room.winner} wins` : room.status === "Draw" ? "Draw game" : room.status === "In progress" ? `${room.turn}'s turn` : room.status;
-  const list = !user ? `<div class="empty-state"><div class="empty-mark">⌁</div><strong>Sign in to see live games</strong><p>Register or sign in to browse public rooms, join matches and chat with players.</p><button class="primary-button" data-action="auth">Sign in / Register</button></div>` : entries.length ? entries.map(([id,r])=>`<button class="game-row ${id===selectedRoomId?"selected":""}" data-room="${esc(id)}"><span class="game-icon">${r.status==="Waiting"?"◷":"✳"}</span><span class="game-info"><strong>${esc(r.name||"Friendly match")}</strong><small>${esc(r.hostName||"Player")} · ${esc(r.status||"Waiting")}</small></span><span class="status ${r.status==="Waiting"?"waiting":r.status==="In progress"?"playing":"finished"}">${esc(r.status||"Waiting")}</span></button>`).join("") : `<div class="empty-state"><div class="empty-mark">✳</div><strong>No rooms yet</strong><p>Be the first to open a match.</p><button class="primary-button" data-action="create">Create the first room</button></div>`;
-  $("#app").innerHTML = `<div class="app-shell">
-    <aside class="sidebar"><a class="brand" href="#"><span class="brand-mark">✳</span><span>NIGHTFALL<small>GAME LOUNGE</small></span></a>
-      <div class="side-label">PLAY</div><button class="nav-item active" data-action="lobby">▦ &nbsp; Game lobby</button><button class="nav-item" data-action="create">＋ &nbsp; Create a game</button>
-      <div class="side-label side-label-spaced">YOUR ACCOUNT</div><div class="account-card"><div class="avatar">${esc(nameOf(user).slice(0,1).toUpperCase())}</div><div class="user-details"><strong>${esc(nameOf(user))}</strong><small>${user?esc(user.email):"Browsing as guest"}</small></div></div>
-      <button class="outline-button full" data-action="auth">${user?"Sign out":"Sign in / Register"}</button><div class="sidebar-note"><span class="online-dot"></span> Firebase connected<br><small>Live rooms update automatically</small></div><div class="sidebar-bottom">✳ NIGHTFALL<span>STRATEGY MEETS SERENITY</span></div>
-    </aside>
-    <main class="main-content"><header class="topbar"><div><div class="eyebrow">THE ARENA</div><h1>Game lobby <span class="live-pill"><i></i> LIVE</span></h1></div><div class="topbar-actions"><span class="quiet-text">Your next match awaits.</span><button class="primary-button" data-action="create">＋ Create game</button></div></header>
-      <section class="welcome-banner"><div class="banner-copy"><span class="banner-kicker">A LITTLE STRATEGY. A LOT OF FUN.</span><h2>Make your <em>next move.</em></h2><p>Challenge a friend and watch every move unfold live.</p><button class="light-button" data-action="create">Start a new game <span>↗</span></button></div><div class="banner-art"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="floating-x">×</div><div class="floating-o">○</div><div class="art-board"><b>×</b><i></i><b>○</b><i>○</i><b>×</b><i></i><b>×</b><i></i><b>○</b></div></div></section>
-      <div class="section-heading"><div><h2>Public rooms <span class="count">${user ? entries.length : "—"}</span></h2><p>${user ? "Rooms created by the community, updated in real time." : "Sign in to browse community rooms."}</p></div>${user ? `<button class="text-button" data-action="refresh">↻ Refresh</button>` : ""}</div>
-      <div class="content-grid"><section class="panel"><div class="panel-heading"><div><h3>Live rooms</h3><p>Choose a room to view its board</p></div><span class="tiny-live"><i></i> LIVE</span></div><div class="game-list">${list}</div><div class="panel-footer"><span>${user ? `${entries.length} public room${entries.length===1?"":"s"}` : "Account required"}</span>${user ? `<button class="text-button" data-action="create">Create room ↗</button>` : ""}</div></section>
-      <section class="panel match-panel"><div class="panel-heading"><div><h3>Match room</h3><p>${room?`Room #${esc(selectedRoomId.slice(-6).toUpperCase())}`:"Select a public room"}</p></div><span class="tiny-live"><i></i> ${room?"SYNCED":"READY"}</span></div>
-      ${room?`<div class="match-title"><div class="match-symbol">${room.symbol==="O"?"○":"×"}</div><div><h3>${esc(room.name||"Friendly match")}</h3><p>Hosted by <strong>${esc(room.hostName||"Player")}</strong></p></div></div>
-      <div class="player-strip"><div><span class="player-dot x-dot">X</span><span><strong>${esc(room.players?.X?.name||"Waiting…")}</strong><small>Player X</small></span></div><div class="versus">VS</div><div><span class="player-dot o-dot">O</span><span><strong>${esc(room.players?.O?.name||"Waiting…")}</strong><small>Player O</small></span></div></div>
-      <div class="board-wrap"><div class="live-board">${board.map((m,i)=>`<button class="board-cell ${m==="X"?"cell-x":m==="O"?"cell-o":""}" data-cell="${i}" ${!myTurn||m||finished?"disabled":""} aria-label="Cell ${i+1}">${m==="X"?"×":m==="O"?"○":""}</button>`).join("")}</div></div>
-      <p class="board-status">${esc(statusText)}${mine?` · You are ${mine}`:""}</p><div class="match-actions">${canDelete?`<button class="danger-button" data-action="delete-room">Delete game</button>`:""}${canJoin?`<button class="primary-button full" data-action="join">Join as ${room.players?.X?"O":"X"} →</button>`:mine&&room.status==="In progress"?`<div class="turn-hint">${myTurn?"It's your turn. Make a move.":"Waiting for your opponent…"}</div>`:`<div class="turn-hint">${esc(statusText)}</div>`}</div>
-      <section class="room-chat"><div class="chat-heading"><div><h3>Room chat</h3><p>Talk with your opponent while you play.</p></div><span class="chat-live"><i></i> LIVE</span></div>
-      ${user && mine ? `<div class="chat-messages" id="chat-messages">${Object.entries(chatMessages).sort((a,b)=>(a[1].createdAt||0)-(b[1].createdAt||0)).map(([mid,m])=>`<div class="chat-message"><strong>${esc(m.name||"Player")}</strong><p>${esc(m.text||"")}</p><small>${m.createdAt?new Date(m.createdAt).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"Just now"}</small></div>`).join("") || `<div class="chat-empty">No messages yet. Say hello!</div>`}</div><form id="chat-form" class="chat-form"><input name="message" maxlength="500" placeholder="Write a message…" autocomplete="off" required><button class="primary-button" type="submit" aria-label="Send message">Send ↗</button></form>` : `<div class="chat-locked">${user ? "Join this room to participate in chat." : "Sign in and join a room to use chat."}</div>`}</section>
-      `:`<div class="empty-match"><div class="empty-mark">× <span>○</span></div><h3>Your next match starts here.</h3><p>Pick a room from the lobby or create your own.</p><button class="primary-button" data-action="create">Create a game</button></div>`}</section></div>
-      <footer class="footer"><span>✳ NIGHTFALL GAME LOUNGE</span><span>Built for the next move.</span></footer></main></div>`;
+  const user = currentUser;
+  const room = roomNow();
+
+  const allEntries = Object.entries(rooms).sort(
+    (a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0)
+  );
+
+  // Public rooms are visible to guests and signed-in users.
+  const entries = allEntries;
+
+  const board = Array.isArray(room?.board)
+    ? room.board
+    : Array(9).fill("");
+
+  const mine = symbolOf(room, user?.uid);
+  const canDelete = canDeleteRoom(room, user);
+  const myTurn =
+    !!room &&
+    room.status === "In progress" &&
+    room.turn === mine;
+
+  const canJoin =
+    !!user &&
+    !!room &&
+    room.status === "Waiting" &&
+    !mine;
+
+  const finished =
+    room && ["Finished", "Draw", "Stopped"].includes(room.status);
+
+  const statusText = !room
+    ? "Choose a room or create one"
+    : room.status === "Finished"
+      ? `${room.winner} wins`
+      : room.status === "Draw"
+        ? "Draw game"
+        : room.status === "In progress"
+          ? `${room.turn}'s turn`
+: room.status;
+
+const list = entries.length
+    ? entries
+        .map(([id, r]) => `
+          <button
+            class="game-row ${id === selectedRoomId ? "selected" : ""}"
+            data-room="${esc(id)}"
+            aria-label="View room ${esc(r.name || "Friendly match")}"
+          >
+            <span class="game-icon">
+              ${r.status === "Waiting" ? "◷" : "✳"}
+            </span>
+
+            <span class="game-info">
+              <strong>${esc(r.name || "Friendly match")}</strong>
+              <small>
+                ${esc(r.hostName || "Player")} · ${esc(r.status || "Waiting")}
+              </small>
+            </span>
+
+            <span class="status ${
+            r.status === "Waiting"
+                ? "waiting"
+                : r.status === "In progress"
+                    ? "playing"
+                    : "finished"
+        }">
+              ${esc(r.status || "Waiting")}
+            </span>
+          </button>
+        `)
+        .join("")
+    : `
+      <div class="empty-state">
+        <div class="empty-mark">✳</div>
+        <strong>No rooms yet</strong>
+        <p>Be the first to open a match.</p>
+        <button
+          class="primary-button"
+          data-action="${user ? "create" : "auth"}"
+        >
+          ${user ? "Create the first room" : "Sign in to create a room"}
+        </button>
+      </div>
+    `;
+
+$("#app").innerHTML = `
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#">
+          <span class="brand-mark">✳</span>
+          <span>NIGHTFALL<small>GAME LOUNGE</small></span>
+        </a>
+
+        <div class="side-label">PLAY</div>
+        <button class="nav-item active" data-action="lobby">▦ &nbsp; Game lobby</button>
+        <button class="nav-item" data-action="create">＋ &nbsp; Create a game</button>
+
+        <div class="side-label side-label-spaced">YOUR ACCOUNT</div>
+
+        <div class="account-card">
+          <div class="avatar">${esc(nameOf(user).slice(0, 1).toUpperCase())}</div>
+          <div class="user-details">
+            <strong>${esc(nameOf(user))}</strong>
+            <small>${user ? esc(user.email) : "Browsing as guest"}</small>
+          </div>
+        </div>
+
+        <button class="outline-button full" data-action="auth">
+          ${user ? "Sign out" : "Sign in / Register"}
+        </button>
+
+        <div class="sidebar-note">
+          <span class="online-dot"></span> Firebase connected<br>
+          <small>Live rooms update automatically</small>
+        </div>
+
+        <div class="sidebar-bottom">
+          ✳ NIGHTFALL
+          <span>STRATEGY MEETS SERENITY</span>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <div class="eyebrow">THE ARENA</div>
+            <h1>
+              Game lobby
+              <span class="live-pill"><i></i> LIVE</span>
+            </h1>
+          </div>
+
+          <div class="topbar-actions">
+            <span class="quiet-text">Your next match awaits.</span>
+            <button class="primary-button" data-action="create">＋ Create game</button>
+          </div>
+        </header>
+
+        <section class="welcome-banner">
+          <div class="banner-copy">
+            <span class="banner-kicker">A LITTLE STRATEGY. A LOT OF FUN.</span>
+            <h2>Make your <em>next move.</em></h2>
+            <p>Challenge a friend and watch every move unfold live.</p>
+            <button class="light-button" data-action="create">
+              Start a new game <span>↗</span>
+            </button>
+          </div>
+
+          <div class="banner-art">
+            <div class="orbit orbit-one"></div>
+            <div class="orbit orbit-two"></div>
+            <div class="floating-x">×</div>
+            <div class="floating-o">○</div>
+            <div class="art-board">
+              <b>×</b><i></i><b>○</b>
+              <i>○</i><b>×</b><i></i>
+              <b>×</b><i></i><b>○</b>
+            </div>
+          </div>
+        </section>
+
+        <div class="section-heading">
+          <div>
+            <h2>Public rooms <span class="count">${entries.length}</span></h2>
+            <p>
+              ${user
+    ? "Rooms created by the community, updated in real time."
+    : "Browse live community rooms. Sign in to join a match."}
+            </p>
+          </div>
+
+          <button class="text-button" data-action="refresh">↻ Refresh</button>
+        </div>
+
+        <div class="content-grid">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <h3>Live rooms</h3>
+                <p>Choose a room to view its board</p>
+              </div>
+              <span class="tiny-live"><i></i> LIVE</span>
+            </div>
+
+            <div class="game-list">${list}</div>
+
+            <div class="panel-footer">
+              <span>
+                ${entries.length} public room${entries.length === 1 ? "" : "s"}
+              </span>
+              <button class="text-button" data-action="create">
+                Create room ↗
+              </button>
+            </div>
+          </section>
+
+          <section class="panel match-panel">
+            <div class="panel-heading">
+              <div>
+                <h3>Match room</h3>
+                <p>
+                  ${room
+    ? `Room #${esc(selectedRoomId.slice(-6).toUpperCase())}`
+    : "Select a public room"}
+                </p>
+              </div>
+              <span class="tiny-live">
+                <i></i> ${room ? "SYNCED" : "READY"}
+              </span>
+            </div>
+
+            ${
+    room
+        ? `
+                  <div class="match-title">
+                    <div class="match-symbol">${room.symbol === "O" ? "○" : "×"}</div>
+                    <div>
+                      <h3>${esc(room.name || "Friendly match")}</h3>
+                      <p>Hosted by <strong>${esc(room.hostName || "Player")}</strong></p>
+                    </div>
+                  </div>
+
+                  <div class="player-strip">
+                    <div>
+                      <span class="player-dot x-dot">X</span>
+                      <span>
+                        <strong>${esc(room.players?.X?.name || "Waiting…")}</strong>
+                        <small>Player X</small>
+                      </span>
+                    </div>
+
+                    <div class="versus">VS</div>
+
+                    <div>
+                      <span class="player-dot o-dot">O</span>
+                      <span>
+                        <strong>${esc(room.players?.O?.name || "Waiting…")}</strong>
+                        <small>Player O</small>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="board-wrap">
+                    <div class="live-board">
+                      ${board.map((m, i) => `
+                        <button
+                          class="board-cell ${m === "X" ? "cell-x" : m === "O" ? "cell-o" : ""}"
+                          data-cell="${i}"
+                          ${!myTurn || m || finished || !user ? "disabled" : ""}
+                          aria-label="Cell ${i + 1}"
+                        >${m === "X" ? "×" : m === "O" ? "○" : ""}</button>
+                      `).join("")}
+                    </div>
+                  </div>
+
+                  <p class="board-status">
+                    ${esc(statusText)}${mine ? ` · You are ${mine}` : ""}
+                  </p>
+
+                  <div class="match-actions">
+                    ${
+            canDelete
+                ? `<button class="danger-button" data-action="delete-room">Delete game</button>`
+                : ""
+        }
+
+                    ${
+            canJoin
+                ? `<button class="primary-button full" data-action="join">Join as ${room.players?.X ? "O" : "X"} →</button>`
+                : !user && room.status === "Waiting"
+                    ? `<button class="primary-button full" data-action="auth">Sign in to join this game</button>`
+                    : mine && room.status === "In progress"
+                        ? `<div class="turn-hint">${myTurn ? "It's your turn. Make a move." : "Waiting for your opponent…"}</div>`
+                        : `<div class="turn-hint">${esc(statusText)}</div>`
+        }
+                  </div>
+
+                  <section class="room-chat">
+                    <div class="chat-heading">
+                      <div>
+                        <h3>Room chat</h3>
+                        <p>Talk with your opponent while you play.</p>
+                      </div>
+                      <span class="chat-live"><i></i> LIVE</span>
+                    </div>
+
+                    ${
+            user && mine
+                ? `
+                          <div class="chat-messages" id="chat-messages">
+                            ${
+                    Object.entries(chatMessages)
+                        .sort((a, b) => (a[1].createdAt || 0) - (b[1].createdAt || 0))
+                        .map(([mid, m]) => `
+                                  <div class="chat-message">
+                                    <strong>${esc(m.name || "Player")}</strong>
+                                    <p>${esc(m.text || "")}</p>
+                                    <small>
+                                      ${m.createdAt
+                            ? new Date(m.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            })
+                            : "Just now"}
+                                    </small>
+                                  </div>
+                                `).join("")
+                    || `<div class="chat-empty">No messages yet. Say hello!</div>`
+                }
+                          </div>
+
+                          <form id="chat-form" class="chat-form">
+                            <input
+                              name="message"
+                              maxlength="500"
+                              placeholder="Write a message…"
+                              autocomplete="off"
+                              required
+                            >
+                            <button class="primary-button" type="submit" aria-label="Send message">
+                              Send ↗
+                            </button>
+                          </form>
+                        `
+                : `
+                          <div class="chat-locked">
+                            ${user
+                    ? "Join this room to participate in chat."
+                    : "Sign in and join a room to use chat."}
+                          </div>
+                        `
+        }
+                  </section>
+                `
+        : `
+                  <div class="empty-match">
+                    <div class="empty-mark">× <span>○</span></div>
+                    <h3>Your next match starts here.</h3>
+                    <p>Pick a room from the lobby or create your own.</p>
+                    <button class="primary-button" data-action="create">
+                      Create a game
+                    </button>
+                  </div>
+                `
+}
+          </section>
+        </div>
+
+        <footer class="footer">
+          <span>✳ NIGHTFALL GAME LOUNGE</span>
+          <span>Built for the next move.</span>
+        </footer>
+      </main>
+    </div>
+  `;
 }
 
 async function createRoom(form) {
@@ -219,4 +578,21 @@ function subscribeToChat(roomId) {
   }, error => { console.error(error); toast("Chat could not load. Check database rules."); });
 }
 onAuthStateChanged(auth,user=>{currentUser=user;render();});
-onValue(ref(db,"games"),snapshot=>{rooms=snapshot.val()||{};if(!selectedRoomId||!rooms[selectedRoomId])selectedRoomId=currentUser?(Object.keys(rooms)[0]||null):null;if(selectedRoomId!==chatRoomSubscribed)subscribeToChat(selectedRoomId);render();},error=>{console.error(error);toast("Could not load rooms. Check database rules.");});
+//onValue(ref(db,"games"),snapshot=>{rooms=snapshot.val()||{};if(!selectedRoomId||!rooms[selectedRoomId])selectedRoomId=currentUser?(Object.keys(rooms)[0]||null):null;if(selectedRoomId!==chatRoomSubscribed)subscribeToChat(selectedRoomId);render();},error=>{console.error(error);toast("Could not load rooms. Check database rules.");});
+
+onValue(ref(db, "games"), snapshot => {
+  rooms = snapshot.val() || {};
+
+  if (!selectedRoomId || !rooms[selectedRoomId]) {
+    selectedRoomId = Object.keys(rooms)[0] || null;
+  }
+
+  if (selectedRoomId !== chatRoomSubscribed) {
+    subscribeToChat(selectedRoomId);
+  }
+
+  render();
+}, error => {
+  console.error("Could not load rooms:", error);
+  toast("Could not load rooms. Check database rules.");
+});
